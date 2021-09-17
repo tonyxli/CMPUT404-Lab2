@@ -1,10 +1,10 @@
-import socket, time, sys 
+import socket, time, sys
+from multiprocessing import Process
 
 HOST = ""
 PORT = 8001
 BUFFER_SIZE = 1024
 
-#get ip 
 def get_remote_ip(host):
     print(f'Getting IP for {host}')
     try:
@@ -16,10 +16,22 @@ def get_remote_ip(host):
     print (f'Ip address of {host} is {remote_ip}')
     return remote_ip
 
+def handle_request(addr, conn, proxy_end):
+    send_full_data = conn.recv(BUFFER_SIZE)
+    print(f"Sending recieved data {send_full_data} to google")
+    proxy_end.sendall(send_full_data)
+
+    #shut down
+    proxy_end.shutdown(socket.SHUT_WR) #shutdown() is different from close() 
+
+    data = proxy_end.recv(BUFFER_SIZE)
+    print(f"Sending recieved data {data} to client")
+    conn.send(data)
+
+
 def main():
-    #Q6
-    exhost = 'www.google.com'
-    port = 80
+    ex_host = 'www.google.com'
+    ex_port = 80
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as proxy_start:
         print("Starting proxy server")
@@ -28,31 +40,22 @@ def main():
         proxy_start.listen(2)
 
         while True:
-            #connect proxy_start
             conn, addr = proxy_start.accept()
             print("Connected by", addr)
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as proxy_end:
                 print("Connecting to Google")
-                remote_ip = get_remote_ip(exhost)
+                remote_ip = get_remote_ip(ex_host)
 
                 #connect proxy_end
-                proxy_end.connect((remote_ip, port))
+                proxy_end.connect((remote_ip, ex_port))
 
-                #send data 
-                send_full_data = conn.recv(BUFFER_SIZE)
-                print(f"Sending recieved data {send_full_data} to google")
-                proxy_end.sendall(send_full_data)
+                #start a Process daemon for handling multiple connections
+                p = Process(tartget = handle_request, args = (addr, conn, proxy_end))
+                p.daemon = True
+                p.start()
 
-                #remember to shut down
-                proxy_end.shutdown(socket.SHUT_WR) #shutdown() is different from close() 
-
-                data = proxy_end.recv(BUFFER_SIZE)
-                print(f"Sending recieved data {data} to client")
-                conn.send(data)
-
-            conn.close()
-
+            conn.close() 
 
 if __name__ == "__main__":
     main()
